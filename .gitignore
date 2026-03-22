@@ -50,7 +50,7 @@ engine_cpp/out/
 engine_cpp/.cache/
 
 # Node/React Artefacts
-node_modules/
+*/node_modules/
 dist/
 .env
 .env.local

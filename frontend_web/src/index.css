@@ -36,6 +36,9 @@ input {
   max-width: 1380px;
   margin: 0 auto;
   padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
@@ -61,12 +64,13 @@ header p {
 }
 
 .main-content {
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
   min-height: 0;
-  height: calc(100vh - 170px);
+  height: calc(100vh - 190px);
 }
 
 .card {
@@ -97,6 +101,10 @@ header p {
   border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
+.controls-toolbar h2 {
+  margin: 0;
+}
+
 .controls-body {
   display: flex;
   flex-direction: column;
@@ -112,6 +120,7 @@ header p {
   align-items: center;
   min-height: 0;
   height: 100%;
+  padding: 0.75rem;
   background:
     radial-gradient(circle at center, rgba(30, 41, 59, 0.95) 0%, rgba(8, 17, 31, 1) 70%),
     linear-gradient(180deg, rgba(30, 41, 59, 0.45), rgba(8, 17, 31, 0.8));
