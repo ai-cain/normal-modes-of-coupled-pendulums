@@ -4,14 +4,21 @@
 
 int main(int argc, char* argv[]) {
     int n = 4;
-    double L = 1.12;
     double g = 9.8;
+    std::vector<double> lengths;
     
     if (argc >= 2) n = std::stoi(argv[1]);
-    if (argc >= 3) L = std::stod(argv[2]);
-    if (argc >= 4) g = std::stod(argv[3]);
+    if (argc >= 3) g = std::stod(argv[2]);
     
-    PendulumSystem sys(n, L, g);
+    for (int i = 0; i < n; ++i) {
+        if (argc >= 4 + i) {
+            lengths.push_back(std::stod(argv[3 + i]));
+        } else {
+            lengths.push_back(1.12 / n);
+        }
+    }
+    
+    PendulumSystem sys(n, lengths, g);
     sys.build_matrices();
     sys.solve_modes();
     

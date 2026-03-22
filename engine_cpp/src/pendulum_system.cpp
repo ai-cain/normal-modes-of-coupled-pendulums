@@ -4,32 +4,35 @@
 #include <algorithm>
 #include <cmath>
 
-PendulumSystem::PendulumSystem(int num_pendulums, double L, double gravity) 
-    : n(num_pendulums), total_length(L), g(gravity) {
+PendulumSystem::PendulumSystem(int num_pendulums, std::vector<double> L_array, double gravity) 
+    : n(num_pendulums), lengths(L_array), g(gravity) {
     if (n < 1) n = 1;
+    if (lengths.size() != n) lengths.assign(n, 1.12/n);
 }
 
 void PendulumSystem::build_matrices() {
     M = Eigen::MatrixXd::Zero(n, n);
     K = Eigen::MatrixXd::Zero(n, n);
     
-    double segment_length = total_length / n;
-    double k_factor = g / segment_length;
-    
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
-            M(i, j) = n - std::max(i, j); 
+            // M_{i,j} = (SUM_{k=max(i,j)}^{n} m_k) * l_j
+            // For equal masses m_k=1, this is (n - max(i,j)) * l_j
+            M(i, j) = (n - std::max(i, j)) * lengths[j]; 
         }
-        K(i, i) = k_factor * (n - i);
+        K(i, i) = g * (n - i);
     }
 }
 
 void PendulumSystem::solve_modes() {
-    // Solve generalized eigenvalue problem: K x = lambda M x
-    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(K, M);
+    // Solve standard eigenvalue problem: (M^-1 * K) x = lambda x
+    Eigen::MatrixXd MinvK = M.inverse() * K;
+    Eigen::EigenSolver<Eigen::MatrixXd> es(MinvK);
     
-    eigenvalues = es.eigenvalues();
-    eigenvectors = es.eigenvectors();
+    // Some modes might be slightly complex due to numerical precision, we just take real part
+    eigenvalues = es.eigenvalues().real();
+    eigenvectors = es.eigenvectors().real();
+    inverse_eigenvectors = eigenvectors.inverse();
 }
 
 #include <sstream>
@@ -40,7 +43,9 @@ std::string PendulumSystem::to_json() const {
     ss << std::fixed << std::setprecision(6);
     ss << "{\n";
     ss << "  \"n\": " << n << ",\n";
-    ss << "  \"total_length\": " << total_length << ",\n";
+    ss << "  \"lengths\": [";
+    for(int i=0; i<n; ++i) { ss << lengths[i] << (i<n-1?", ":""); }
+    ss << "],\n";
     ss << "  \"g\": " << g << ",\n";
     
     // frequencies = sqrt(eigenvalues)
@@ -52,21 +57,26 @@ std::string PendulumSystem::to_json() const {
     }
     ss << "],\n";
     
-    // Modal shapes (columns are eigenvectors)
-    // We normalize such that the first component is 1 for readability
     ss << "  \"modal_shapes\": [\n";
-    for(int j_col=0; j_col<n; ++j_col) {
+    for(int i_row=0; i_row<n; ++i_row) {
         ss << "    [";
-        double a1 = eigenvectors(0, j_col);
-        for(int i_row=0; i_row<n; ++i_row) {
-            ss << (eigenvectors(i_row, j_col) / a1);
-            if (i_row < n - 1) ss << ", ";
+        for(int j_col=0; j_col<n; ++j_col) {
+            ss << eigenvectors(i_row, j_col) << (j_col < n - 1 ? ", " : "");
         }
-        ss << "]";
-        if (j_col < n - 1) ss << ",\n";
-        else ss << "\n";
+        ss << "]" << (i_row < n - 1 ? ",\n" : "\n");
+    }
+    ss << "  ],\n";
+
+    ss << "  \"inverse_modal_shapes\": [\n";
+    for(int i_row=0; i_row<n; ++i_row) {
+        ss << "    [";
+        for(int j_col=0; j_col<n; ++j_col) {
+            ss << inverse_eigenvectors(i_row, j_col) << (j_col < n - 1 ? ", " : "");
+        }
+        ss << "]" << (i_row < n - 1 ? ",\n" : "\n");
     }
     ss << "  ]\n";
+    
     ss << "}\n";
     
     return ss.str();

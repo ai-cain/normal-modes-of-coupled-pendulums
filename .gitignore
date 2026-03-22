@@ -43,3 +43,15 @@
 
 # debug information files
 *.dwo
+
+# C++ Build Artefacts
+engine_cpp/build/
+engine_cpp/out/
+engine_cpp/.cache/
+
+# Node/React Artefacts
+node_modules/
+dist/
+.env
+.env.local
+.vscode/

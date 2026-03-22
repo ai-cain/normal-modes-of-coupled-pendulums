@@ -8,7 +8,7 @@
 class PendulumSystem {
 public:
     int n;
-    double total_length;
+    std::vector<double> lengths;
     double g;
     
     Eigen::MatrixXd M;
@@ -16,8 +16,9 @@ public:
     
     Eigen::VectorXd eigenvalues; // Squared natural frequencies (omega^2)
     Eigen::MatrixXd eigenvectors; // Modal shapes
+    Eigen::MatrixXd inverse_eigenvectors; // V^-1
     
-    PendulumSystem(int num_pendulums, double L = 1.12, double gravity = 9.8);
+    PendulumSystem(int num_pendulums, std::vector<double> L_array, double gravity = 9.8);
     
     void build_matrices();
     void solve_modes();
