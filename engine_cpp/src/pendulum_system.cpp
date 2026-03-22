@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 PendulumSystem::PendulumSystem(
     int num_pendulums,
@@ -50,6 +51,10 @@ void PendulumSystem::solve_modes() {
     // This is more stable than explicitly forming M^-1 K and preserves the
     // self-adjoint structure of the linearized mechanics.
     Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(K, M);
+
+    if (es.info() != Eigen::Success) {
+        throw std::runtime_error("Failed to solve the generalized eigenvalue problem.");
+    }
 
     eigenvalues = es.eigenvalues();
     eigenvectors = es.eigenvectors();

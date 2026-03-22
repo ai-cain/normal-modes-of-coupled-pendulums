@@ -7,4 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # We include the previously downloaded Eigen3 library directly
 include_directories(build/_deps/eigen-src)
 
-add_executable(pendulum_cli src/main.cpp src/pendulum_system.cpp)
+find_package(Threads REQUIRED)
+
+add_executable(
+    pendulum_cli
+    src/main.cpp
+    src/pendulum_system.cpp
+    src/simulation_engine.cpp
+)
+
+target_link_libraries(pendulum_cli PRIVATE Threads::Threads)

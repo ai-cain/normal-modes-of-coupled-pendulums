@@ -5,7 +5,7 @@ Interactive sandbox for serial coupled pendulums with two complementary views of
 - `Nonlinear Sandbox`: integrates the full coupled equations for large angles, unequal lengths, and unequal masses.
 - `Linear Modes`: solves the small-angle generalized eigenvalue problem to show normal modes, frequencies, and modal superposition.
 
-The frontend is a React + Vite canvas app. The linear modal solver lives in C++ and is served to the UI through a small Node/WebSocket bridge.
+The frontend is a React + Vite canvas app. A persistent C++ engine now owns both the nonlinear time integration and the linear modal solver, while Node acts as a small WebSocket bridge between the browser and the native process.
 
 ## Demo Video
 
@@ -38,11 +38,11 @@ The full derivation of the implemented model is in [docs/mathematical_model.md](
 ## Project Layout
 
 - `engine_cpp/`
-  - C++ modal solver for the linearized generalized eigenvalue problem
+  - C++ simulation engine for nonlinear dynamics and linear normal modes
 - `backend_node/`
-  - Node server exposing the C++ solver over WebSocket
+  - Node bridge exposing the persistent C++ engine over WebSocket
 - `frontend_web/`
-  - React UI, canvas renderer, nonlinear RK4 sandbox, and controls
+  - React UI, canvas renderer, controls, and recording
 
 ## Running Locally
 
@@ -108,9 +108,9 @@ with
 \mu_{ij} = \sum_{k=\max(i,j)}^{n} m_k
 ```
 
-That nonlinear system is what the frontend integrates in `Nonlinear Sandbox`.
+That nonlinear system is what the native C++ engine integrates in `Nonlinear Sandbox`.
 
-For the small-angle modal view, the C++ engine solves the linearized generalized eigenvalue problem
+For the small-angle modal view, the same C++ engine solves the linearized generalized eigenvalue problem
 
 ```math
 K v = \lambda M v
@@ -129,8 +129,9 @@ K_{ij} = \delta_{ij}\,\mu_i g l_i
 ## Where To Look
 
 - For the real mathematical model implemented in the app, read [docs/mathematical_model.md](docs/mathematical_model.md).
-- For the nonlinear RK4 sandbox in code, look at `frontend_web/src/App.tsx`.
-- For the linear modal solver in C++, look at `engine_cpp/src/pendulum_system.cpp`.
+- For the frontend transport and canvas renderer, look at `frontend_web/src/App.tsx`.
+- For the native simulation loop, look at `engine_cpp/src/simulation_engine.cpp`.
+- For the linear modal solver, look at `engine_cpp/src/pendulum_system.cpp`.
 
 ## Project Docs
 

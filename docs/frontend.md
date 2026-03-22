@@ -6,9 +6,10 @@ The frontend lives in `frontend_web/` and is a React + Vite application.
 
 - render the UI
 - switch between nonlinear and linear views
-- integrate the nonlinear equations in the browser
 - maintain current state, playback, and initial conditions
+- send configuration commands to the backend
 - draw the pendulum chain and fading tails on a canvas
+- record the canvas when requested
 
 ## Entry Point
 
@@ -39,13 +40,12 @@ The frontend stores:
 
 ## Nonlinear Path
 
-The nonlinear solver is implemented entirely in the frontend:
+The nonlinear path is now engine-backed:
 
-1. Build suffix mass sums.
-2. Assemble the nonlinear linear system `A(theta) theta_ddot = b(theta, theta_dot)`.
-3. Solve that linear system by Gaussian elimination.
-4. Integrate the first-order system with RK4.
-5. Render the resulting rod and bob positions on the canvas.
+1. The frontend sends the current setup to the backend.
+2. The backend forwards it to the native C++ engine.
+3. The engine integrates the nonlinear equations and streams back world-space bob positions.
+4. The frontend renders those positions on the canvas.
 
 This path is used when the user selects `Nonlinear Sandbox`.
 
@@ -54,13 +54,10 @@ This path is used when the user selects `Nonlinear Sandbox`.
 The linear path is modal:
 
 1. The frontend sends parameters to the backend over WebSocket.
-2. The backend returns frequencies and modal shapes.
-3. The frontend computes modal coefficients using `V^-1 theta_0`.
-4. The frontend reconstructs
-
-$$
-\theta_i(t) = \sum_k c_k V_{ik}\cos(\omega_k t).
-$$
+2. The backend forwards them to the native engine.
+3. The native engine solves the modal problem and reconstructs
+   `theta(t)` internally over time.
+4. The frontend renders the streamed positions.
 
 This path is used when the user selects `Linear Modes`.
 

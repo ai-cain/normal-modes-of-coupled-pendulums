@@ -1,9 +1,8 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import ControlsPanel from './components/ControlsPanel';
 import {
   clamp,
   COLOR_PALETTE,
-  computeChainPositions,
   computeViewport,
   createFilledArray,
   DEFAULT_GRAVITY,
@@ -14,25 +13,16 @@ import {
   DEFAULT_MASSES,
   INITIAL_N,
   LINEAR_ANGLE_LIMIT,
-  MAX_SUBSTEP,
   MAX_TRAIL_POINTS,
   NONLINEAR_ANGLE_LIMIT,
-  rk4Step,
   toCanvasPoint,
   TOTAL_DEFAULT_LENGTH,
 } from './lib/pendulumMath';
-import type {
-  DistributionMode,
-  Point,
-  SimulationData,
-  SimulationMode,
-} from './types';
+import type { DistributionMode, EngineSnapshot, Point, SimulationMode } from './types';
 import './index.css';
 
 const buildDefaultLengths = (count: number) =>
-  count === INITIAL_N
-    ? [...DEFAULT_LENGTHS]
-    : createFilledArray(count, TOTAL_DEFAULT_LENGTH / count);
+  count === INITIAL_N ? [...DEFAULT_LENGTHS] : createFilledArray(count, TOTAL_DEFAULT_LENGTH / count);
 
 const buildDefaultMasses = (count: number) =>
   count === INITIAL_N ? [...DEFAULT_MASSES] : createFilledArray(count, DEFAULT_MASS);
@@ -61,6 +51,83 @@ const getSupportedRecordingMimeType = () => {
   return recordingMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? '';
 };
 
+const drawSnapshot = (
+  canvas: HTMLCanvasElement,
+  snapshot: EngineSnapshot,
+  trails: Point[][],
+) => {
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const scenePoints: Point[] = [{ x: 0, y: 0 }, ...snapshot.positions];
+  trails.forEach((trail) => {
+    scenePoints.push(...trail);
+  });
+
+  const viewport = computeViewport(scenePoints, width, height);
+  const anchorPoint = toCanvasPoint({ x: 0, y: 0 }, viewport);
+  const canvasPositions = snapshot.positions.map((point) => toCanvasPoint(point, viewport));
+  const canvasTrails = trails.map((trail) => trail.map((point) => toCanvasPoint(point, viewport)));
+
+  context.clearRect(0, 0, width, height);
+
+  context.beginPath();
+  context.moveTo(anchorPoint.x - 120, anchorPoint.y);
+  context.lineTo(anchorPoint.x + 120, anchorPoint.y);
+  context.lineWidth = 3;
+  context.strokeStyle = 'rgba(31, 37, 50, 0.2)';
+  context.stroke();
+
+  context.beginPath();
+  context.arc(anchorPoint.x, anchorPoint.y, 4, 0, Math.PI * 2);
+  context.fillStyle = 'rgba(31, 37, 50, 0.48)';
+  context.fill();
+
+  context.lineCap = 'round';
+  canvasTrails.forEach((trail, index) => {
+    const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
+
+    for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
+      const progress = pointIndex / Math.max(1, trail.length - 1);
+      const alpha = 0.03 + Math.pow(progress, 2.1) * 0.42;
+      const widthScale = 0.85 + progress * 1.45;
+
+      context.beginPath();
+      context.moveTo(trail[pointIndex - 1].x, trail[pointIndex - 1].y);
+      context.lineTo(trail[pointIndex].x, trail[pointIndex].y);
+      context.lineWidth = widthScale;
+      context.strokeStyle = `rgba(${rgb}, ${alpha})`;
+      context.stroke();
+    }
+  });
+
+  let previousPoint = anchorPoint;
+  canvasPositions.forEach((point, index) => {
+    const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
+
+    context.beginPath();
+    context.moveTo(previousPoint.x, previousPoint.y);
+    context.lineTo(point.x, point.y);
+    context.lineWidth = 2;
+    context.strokeStyle = 'rgba(53, 60, 74, 0.38)';
+    context.stroke();
+
+    context.beginPath();
+    context.arc(point.x, point.y, 11, 0, Math.PI * 2);
+    context.fillStyle = `rgba(${rgb}, 0.82)`;
+    context.fill();
+    context.lineWidth = 2;
+    context.strokeStyle = 'rgba(255, 252, 247, 0.92)';
+    context.stroke();
+
+    previousPoint = point;
+  });
+};
+
 function App() {
   const [simulationMode, setSimulationMode] = useState<SimulationMode>('nonlinear');
   const [lengthMode, setLengthMode] = useState<DistributionMode>('independent');
@@ -73,7 +140,7 @@ function App() {
   const [masses, setMasses] = useState<number[]>(buildDefaultMasses(INITIAL_N));
   const [initialAngles, setInitialAngles] = useState<number[]>(buildDefaultAngles(INITIAL_N));
 
-  const [data, setData] = useState<SimulationData | null>(null);
+  const [snapshot, setSnapshot] = useState<EngineSnapshot | null>(null);
   const [error, setError] = useState('');
   const [isPlaying, setIsPlaying] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
@@ -85,11 +152,11 @@ function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingUrlRef = useRef<string | null>(null);
-  const timeRef = useRef(0);
-  const lastFrameTimeRef = useRef(0);
-  const nonlinearAnglesRef = useRef<number[]>([...DEFAULT_INITIAL_ANGLES]);
-  const nonlinearVelocitiesRef = useRef<number[]>(createFilledArray(INITIAL_N, 0));
   const trailHistoryRef = useRef<Point[][]>(Array.from({ length: INITIAL_N }, () => []));
+  const lastTrailRevisionRef = useRef(-1);
+  const lastTrailTimeRef = useRef(Number.NEGATIVE_INFINITY);
+  const isPlayingRef = useRef(isPlaying);
+  const lastConfigKeyRef = useRef('');
 
   const angleLimit =
     simulationMode === 'linear' ? LINEAR_ANGLE_LIMIT : NONLINEAR_ANGLE_LIMIT;
@@ -98,8 +165,10 @@ function App() {
     typeof HTMLCanvasElement !== 'undefined' &&
     'captureStream' in HTMLCanvasElement.prototype;
 
-  const clearTrails = (count: number) => {
+  const resetTrailState = (count: number) => {
     trailHistoryRef.current = Array.from({ length: count }, () => []);
+    lastTrailRevisionRef.current = -1;
+    lastTrailTimeRef.current = Number.NEGATIVE_INFINITY;
   };
 
   const releaseRecordingUrl = () => {
@@ -127,60 +196,53 @@ function App() {
     link.click();
   };
 
-  const resetNonlinearState = (angles: number[]) => {
-    nonlinearAnglesRef.current = [...angles];
-    nonlinearVelocitiesRef.current = createFilledArray(angles.length, 0);
-    timeRef.current = 0;
-    clearTrails(angles.length);
-  };
-
-  const requestLinearUpdate = (
-    pendulumCount: number,
-    nextLengths: number[],
-    nextMasses: number[],
-    gravity: number,
-  ) => {
+  const sendSocketMessage = useEffectEvent((payload: unknown) => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) {
       return;
     }
 
-    wsRef.current.send(
-      JSON.stringify({
-        n: pendulumCount,
-        lengths: nextLengths,
-        masses: nextMasses,
-        g: gravity,
-      }),
-    );
-  };
+    wsRef.current.send(JSON.stringify(payload));
+  });
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   useEffect(() => {
     const socket = new WebSocket(backendWebSocketUrl);
     wsRef.current = socket;
 
     socket.onopen = () => {
+      lastConfigKeyRef.current = '';
       setIsSocketReady(true);
+      setError('');
     };
 
     socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
+      try {
+        const message = JSON.parse(event.data);
 
-      if (message.error) {
-        setError(message.error);
-        return;
-      }
+        if (message.type === 'error' || message.error) {
+          setError(message.message ?? message.error ?? 'Engine error.');
+          return;
+        }
 
-      if (message.type === 'modes_result') {
-        setData(message.data);
-        setError('');
+        if (message.type === 'state') {
+          setSnapshot(message.data as EngineSnapshot);
+          setError('');
+        }
+      } catch {
+        setError('Invalid output from engine.');
       }
     };
 
     socket.onclose = () => {
+      lastConfigKeyRef.current = '';
       setIsSocketReady(false);
     };
 
     return () => {
+      lastConfigKeyRef.current = '';
       setIsSocketReady(false);
       socket.close();
     };
@@ -216,49 +278,100 @@ function App() {
       return;
     }
 
-    requestLinearUpdate(n, lengths, masses, g);
-  }, [g, isSocketReady, lengths, masses, n]);
+    const configKey = JSON.stringify({
+      simulationMode,
+      n,
+      g,
+      lengths,
+      masses,
+      initialAngles,
+      playing: isPlayingRef.current,
+    });
 
-  const modalCoefficients = useMemo(() => {
-    if (!data) {
-      return [];
+    if (lastConfigKeyRef.current === configKey) {
+      return;
     }
 
-    return data.inverse_modal_shapes.map((row) =>
-      row.reduce((sum, value, index) => sum + value * (initialAngles[index] ?? 0), 0),
-    );
-  }, [data, initialAngles]);
+    lastConfigKeyRef.current = configKey;
 
-  const advanceNonlinearState = useEffectEvent((totalDt: number) => {
-    let remaining = totalDt;
-    let nextAngles = nonlinearAnglesRef.current;
-    let nextVelocities = nonlinearVelocitiesRef.current;
+    sendSocketMessage({
+      type: 'configure',
+      data: {
+        simulationMode,
+        n,
+        g,
+        lengths,
+        masses,
+        initialAngles,
+        playing: isPlayingRef.current,
+      },
+    });
+  }, [g, initialAngles, isSocketReady, lengths, masses, n, simulationMode]);
 
-    while (remaining > 1e-8) {
-      const dt = Math.min(MAX_SUBSTEP, remaining);
-      const nextState = rk4Step(nextAngles, nextVelocities, dt, lengths, masses, g);
-      nextAngles = nextState.angles;
-      nextVelocities = nextState.velocities;
-      remaining -= dt;
+  useEffect(() => {
+    if (!isSocketReady) {
+      return;
     }
 
-    nonlinearAnglesRef.current = nextAngles;
-    nonlinearVelocitiesRef.current = nextVelocities;
-  });
+    sendSocketMessage({
+      type: 'set_playing',
+      data: { playing: isPlaying },
+    });
+  }, [isPlaying, isSocketReady]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    if (!snapshot) {
+      const context = canvas.getContext('2d');
+      context?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    if (
+      lastTrailRevisionRef.current !== snapshot.revision ||
+      snapshot.time < lastTrailTimeRef.current
+    ) {
+      resetTrailState(snapshot.positions.length);
+    }
+
+    if (trailHistoryRef.current.length !== snapshot.positions.length) {
+      trailHistoryRef.current = Array.from({ length: snapshot.positions.length }, () => []);
+    }
+
+    if (snapshot.playing && snapshot.time > lastTrailTimeRef.current + 1e-9) {
+      snapshot.positions.forEach((position, index) => {
+        const trail = trailHistoryRef.current[index];
+        trail.push(position);
+
+        if (trail.length > MAX_TRAIL_POINTS) {
+          trail.shift();
+        }
+      });
+    }
+
+    lastTrailRevisionRef.current = snapshot.revision;
+    lastTrailTimeRef.current = snapshot.time;
+
+    drawSnapshot(canvas, snapshot, trailHistoryRef.current);
+  }, [snapshot]);
 
   const updateLengths = (nextLengths: number[]) => {
     setLengths(nextLengths);
-    resetNonlinearState(initialAngles);
+    resetTrailState(nextLengths.length);
   };
 
   const updateMasses = (nextMasses: number[]) => {
     setMasses(nextMasses);
-    resetNonlinearState(initialAngles);
+    resetTrailState(nextMasses.length);
   };
 
   const updateAngles = (nextAngles: number[]) => {
     setInitialAngles(nextAngles);
-    resetNonlinearState(nextAngles);
+    resetTrailState(nextAngles.length);
   };
 
   const handleSimulationModeChange = (nextMode: SimulationMode) => {
@@ -302,7 +415,7 @@ function App() {
     setLengths(nextLengths);
     setMasses(nextMasses);
     setInitialAngles(nextAngles);
-    resetNonlinearState(nextAngles);
+    resetTrailState(nextCount);
   };
 
   const handleLengthModeChange = (nextMode: DistributionMode) => {
@@ -363,7 +476,7 @@ function App() {
 
   const handleGravityChange = (value: number) => {
     setG(value);
-    resetNonlinearState(initialAngles);
+    resetTrailState(n);
   };
 
   const handleSharedLengthChange = (value: number) => {
@@ -396,9 +509,11 @@ function App() {
     updateAngles(nextAngles);
   };
 
-  const resetToInitialState = () => {
+  const handleReset = () => {
     setIsPlaying(false);
-    resetNonlinearState(initialAngles);
+    resetTrailState(n);
+    sendSocketMessage({ type: 'reset' });
+    sendSocketMessage({ type: 'set_playing', data: { playing: false } });
   };
 
   const handleToggleRecording = () => {
@@ -471,157 +586,23 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-      return;
-    }
-
-    let animationId = 0;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const draw = (now: number) => {
-      const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.05);
-      lastFrameTimeRef.current = now;
-
-      if (isPlaying) {
-        if (simulationMode === 'nonlinear') {
-          advanceNonlinearState(dt);
-        }
-
-        timeRef.current += dt;
-      }
-
-      const anglesToDraw =
-        simulationMode === 'linear' && data
-          ? Array.from({ length: n }, (_, index) =>
-              data.modal_shapes[index].reduce(
-                (sum, modalValue, modeIndex) =>
-                  sum +
-                  (modalCoefficients[modeIndex] ?? 0) *
-                    modalValue *
-                    Math.cos((data.frequencies[modeIndex] ?? 0) * timeRef.current),
-                0,
-              ),
-            )
-          : simulationMode === 'linear'
-            ? initialAngles
-            : nonlinearAnglesRef.current;
-
-      const worldPositions = computeChainPositions(anglesToDraw, lengths);
-
-      if (trailHistoryRef.current.length !== n) {
-        clearTrails(n);
-      }
-
-      if (isPlaying) {
-        worldPositions.forEach((position, index) => {
-          const trail = trailHistoryRef.current[index];
-          trail.push(position);
-
-          if (trail.length > MAX_TRAIL_POINTS) {
-            trail.shift();
-          }
-        });
-      }
-
-      const scenePoints: Point[] = [{ x: 0, y: 0 }, ...worldPositions];
-      trailHistoryRef.current.forEach((trail) => {
-        scenePoints.push(...trail);
-      });
-
-      const viewport = computeViewport(scenePoints, width, height);
-      const anchorPoint = toCanvasPoint({ x: 0, y: 0 }, viewport);
-      const canvasPositions = worldPositions.map((point) => toCanvasPoint(point, viewport));
-      const canvasTrails = trailHistoryRef.current.map((trail) =>
-        trail.map((point) => toCanvasPoint(point, viewport)),
-      );
-
-      context.clearRect(0, 0, width, height);
-
-      context.beginPath();
-      context.moveTo(anchorPoint.x - 120, anchorPoint.y);
-      context.lineTo(anchorPoint.x + 120, anchorPoint.y);
-      context.lineWidth = 3;
-      context.strokeStyle = 'rgba(31, 37, 50, 0.2)';
-      context.stroke();
-
-      context.beginPath();
-      context.arc(anchorPoint.x, anchorPoint.y, 4, 0, Math.PI * 2);
-      context.fillStyle = 'rgba(31, 37, 50, 0.48)';
-      context.fill();
-
-      context.lineCap = 'round';
-      canvasTrails.forEach((trail, index) => {
-        const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
-
-        for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
-          const progress = pointIndex / Math.max(1, trail.length - 1);
-          const alpha = 0.03 + Math.pow(progress, 2.1) * 0.42;
-          const widthScale = 0.85 + progress * 1.45;
-
-          context.beginPath();
-          context.moveTo(trail[pointIndex - 1].x, trail[pointIndex - 1].y);
-          context.lineTo(trail[pointIndex].x, trail[pointIndex].y);
-          context.lineWidth = widthScale;
-          context.strokeStyle = `rgba(${rgb}, ${alpha})`;
-          context.stroke();
-        }
-      });
-
-      let previousPoint = anchorPoint;
-      canvasPositions.forEach((point, index) => {
-        const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
-
-        context.beginPath();
-        context.moveTo(previousPoint.x, previousPoint.y);
-        context.lineTo(point.x, point.y);
-        context.lineWidth = 2;
-        context.strokeStyle = 'rgba(53, 60, 74, 0.38)';
-        context.stroke();
-
-        context.beginPath();
-        context.arc(point.x, point.y, 11, 0, Math.PI * 2);
-        context.fillStyle = `rgba(${rgb}, 0.82)`;
-        context.fill();
-        context.lineWidth = 2;
-        context.strokeStyle = 'rgba(255, 252, 247, 0.92)';
-        context.stroke();
-
-        previousPoint = point;
-      });
-
-      animationId = requestAnimationFrame(draw);
-    };
-
-    lastFrameTimeRef.current = performance.now();
-    animationId = requestAnimationFrame(draw);
-
-    return () => cancelAnimationFrame(animationId);
-  }, [data, g, initialAngles, isPlaying, lengths, masses, modalCoefficients, n, simulationMode]);
-
   const headerDescription =
     simulationMode === 'nonlinear'
-      ? 'Single-view workspace for nonlinear motion.'
-      : 'Single-view workspace for normal modes.';
+      ? 'Engine-backed workspace for nonlinear motion.'
+      : 'Engine-backed workspace for normal modes.';
 
   const modeNote =
     simulationMode === 'nonlinear'
-      ? 'Full coupled equations integrated with RK4.'
-      : 'Motion reconstructed from normal modes.';
+      ? 'Native engine integrates the full coupled equations.'
+      : 'Native engine reconstructs motion from normal modes.';
 
-  const stageStatusLabel =
-    simulationMode === 'linear'
-      ? isSocketReady
-        ? 'Linear backend ready'
-        : 'Linear backend offline'
-      : 'Running in browser';
+  const stageStatusLabel = !isSocketReady
+    ? 'Engine offline'
+    : snapshot
+      ? snapshot.playing
+        ? 'Engine streaming'
+        : 'Engine synced'
+      : 'Awaiting engine state';
 
   const metricCards = [
     {
@@ -683,7 +664,7 @@ function App() {
           onSimulationModeChange={handleSimulationModeChange}
           onTogglePlay={() => setIsPlaying((value) => !value)}
           onToggleRecording={handleToggleRecording}
-          onReset={resetToInitialState}
+          onReset={handleReset}
           onNChange={handleNChange}
           onGravityChange={handleGravityChange}
           onLengthModeChange={handleLengthModeChange}
@@ -711,7 +692,7 @@ function App() {
               </span>
               <span
                 className={`status-pill ${
-                  simulationMode === 'linear' && !isSocketReady ? 'warning' : 'success'
+                  !isSocketReady ? 'warning' : 'success'
                 }`}
               >
                 {stageStatusLabel}

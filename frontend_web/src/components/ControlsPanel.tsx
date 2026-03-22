@@ -189,12 +189,7 @@ function ControlsPanel({
     lengthMode === 'independent' ||
     massMode === 'independent' ||
     angleMode === 'independent';
-  const connectionLabel =
-    simulationMode === 'linear'
-      ? isSocketReady
-        ? 'Solver ready'
-        : 'Solver offline'
-      : 'Browser';
+  const connectionLabel = isSocketReady ? 'Engine ready' : 'Engine offline';
   const angleLimitDegrees = toDegrees(angleLimit);
 
   return (

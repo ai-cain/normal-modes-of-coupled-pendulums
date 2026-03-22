@@ -10,11 +10,11 @@ This repository is split into three runtime layers plus documentation:
    - masses
    - initial angles
    - simulation mode
-2. In `Nonlinear Sandbox`, the frontend integrates the equations directly in the browser.
-3. In `Linear Modes`, the frontend sends `n`, `lengths`, `masses`, and `g` to the Node backend over WebSocket.
-4. The backend invokes the C++ executable with those parameters.
-5. The C++ engine builds the linearized matrices, solves the generalized eigenproblem, and returns JSON.
-6. The frontend uses the returned modal data to animate the small-angle solution.
+2. The frontend sends the current configuration and control state to the Node backend over WebSocket.
+3. The backend forwards those commands to a persistent C++ engine process over `stdin/stdout`.
+4. The C++ engine owns the simulation state, advances time internally, and emits JSON snapshots with angles and bob positions.
+5. The backend forwards those snapshots back to the browser over WebSocket.
+6. The frontend renders the received world positions on the canvas.
 
 ## Responsibilities by Layer
 
@@ -22,25 +22,29 @@ This repository is split into three runtime layers plus documentation:
 
 - state and UI controls
 - equal/unequal toggles for mass, length, and angle
-- nonlinear RK4 integrator
+- WebSocket client for engine commands and snapshots
 - canvas rendering
 - trajectory tails
-- linear modal reconstruction from eigenvectors and frequencies
+- recording support
 
 ### Backend
 
 - receives WebSocket messages from the browser
 - validates and normalizes incoming arrays
-- launches the native executable with `execFile`
-- returns parsed JSON back to the frontend
+- keeps a long-lived native engine process alive
+- translates browser JSON messages into native engine commands
+- forwards native engine JSON snapshots back to the frontend
 
 ### C++ Engine
 
+- maintains the authoritative simulation state
+- integrates the nonlinear equations with RK4
 - builds the linearized mass and stiffness matrices
 - solves `K v = lambda M v`
-- returns frequencies, modal shapes, and inverse modal shapes
+- reconstructs linear modal motion over time
+- returns snapshots with angles, velocities, positions, and frequencies
 
-## Why the Project Uses Two Solvers
+## Why the Project Uses Two Models
 
 The nonlinear and linear modes answer different questions:
 
@@ -52,7 +56,7 @@ The nonlinear and linear modes answer different questions:
   - what are the natural frequencies?
   - how does an initial state decompose into modal coordinates?
 
-Keeping both paths is useful because the linear mode is analytically interpretable, while the nonlinear mode is the physical sandbox.
+Keeping both paths is useful because the linear mode is analytically interpretable, while the nonlinear mode is the physical sandbox. Both are now served by the same native engine so the browser stays focused on controls and rendering.
 
 ## Main Files
 
