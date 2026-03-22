@@ -9,7 +9,7 @@ The frontend is a React + Vite canvas app. The linear modal solver lives in C++ 
 
 ## Demo Video
 
-[Download the higher-quality recording (`.webm`)](docs/media/demo.webm)
+[Download the higher-quality recording (`demo.gif`)](docs/media/demo.gif)
 
 <p align="center">
   <img src="docs/media/demo.gif" alt="Coupled pendulums demo animation" width="82%" />
