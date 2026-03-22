@@ -1,0 +1,19 @@
+site_name: Coupled Pendulums Sandbox
+site_description: Documentation for the nonlinear and modal coupled pendulum simulator
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Mathematical Model: mathematical_model.md
+  - Frontend: frontend.md
+  - Backend: backend.md
+  - C++ Engine: engine_cpp.md
+  - Development Guide: development.md
+  - Docs Site: docs_site.md
+docs_dir: docs
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true

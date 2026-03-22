@@ -38,7 +38,17 @@ wss.on('connection', (ws) => {
                 lengths = Array(n).fill(1.12 / n);
             }
 
-            const args = [n.toString(), g.toString(), ...lengths.map(l => l.toString())];
+            let masses = data.masses;
+            if (!masses || !Array.isArray(masses) || masses.length !== n) {
+                masses = Array(n).fill(1.0);
+            }
+
+            const args = [
+                n.toString(),
+                g.toString(),
+                ...lengths.map(l => l.toString()),
+                ...masses.map(m => m.toString()),
+            ];
 
             // Call the C++ Engine securely without spawning a full shell
             execFile(enginePath, args, (error, stdout, stderr) => {

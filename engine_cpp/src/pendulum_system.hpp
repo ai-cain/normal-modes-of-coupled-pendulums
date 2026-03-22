@@ -9,6 +9,7 @@ class PendulumSystem {
 public:
     int n;
     std::vector<double> lengths;
+    std::vector<double> masses;
     double g;
     
     Eigen::MatrixXd M;
@@ -18,7 +19,12 @@ public:
     Eigen::MatrixXd eigenvectors; // Modal shapes
     Eigen::MatrixXd inverse_eigenvectors; // V^-1
     
-    PendulumSystem(int num_pendulums, std::vector<double> L_array, double gravity = 9.8);
+    PendulumSystem(
+        int num_pendulums,
+        std::vector<double> L_array,
+        std::vector<double> M_array,
+        double gravity = 9.8
+    );
     
     void build_matrices();
     void solve_modes();

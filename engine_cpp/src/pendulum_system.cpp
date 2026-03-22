@@ -4,10 +4,16 @@
 #include <algorithm>
 #include <cmath>
 
-PendulumSystem::PendulumSystem(int num_pendulums, std::vector<double> L_array, double gravity) 
-    : n(num_pendulums), lengths(L_array), g(gravity) {
+PendulumSystem::PendulumSystem(
+    int num_pendulums,
+    std::vector<double> L_array,
+    std::vector<double> M_array,
+    double gravity
+)
+    : n(num_pendulums), lengths(L_array), masses(M_array), g(gravity) {
     if (n < 1) n = 1;
     if (lengths.size() != n) lengths.assign(n, 1.12/n);
+    if (masses.size() != n) masses.assign(n, 1.0);
 }
 
 void PendulumSystem::build_matrices() {
@@ -15,23 +21,38 @@ void PendulumSystem::build_matrices() {
     K = Eigen::MatrixXd::Zero(n, n);
     
     for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            // M_{i,j} = (SUM_{k=max(i,j)}^{n} m_k) * l_j
-            // For equal masses m_k=1, this is (n - max(i,j)) * l_j
-            M(i, j) = (n - std::max(i, j)) * lengths[j]; 
+        const double li = lengths[i];
+        double masses_from_i = 0.0;
+        for (int k = i; k < n; ++k) {
+            masses_from_i += masses[k];
         }
-        K(i, i) = g * (n - i);
+
+        for (int j = 0; j < n; ++j) {
+            const double lj = lengths[j];
+            double masses_from_max = 0.0;
+            for (int k = std::max(i, j); k < n; ++k) {
+                masses_from_max += masses[k];
+            }
+
+            // Small-angle serial n-pendulum:
+            // M_{i,j} = (sum of masses below max(i, j)) * l_i * l_j
+            M(i, j) = masses_from_max * li * lj;
+        }
+
+        // Gravity contributes independently to each generalized angle, scaled by
+        // the segment length and the masses hanging below that joint.
+        K(i, i) = g * masses_from_i * li;
     }
 }
 
 void PendulumSystem::solve_modes() {
-    // Solve standard eigenvalue problem: (M^-1 * K) x = lambda x
-    Eigen::MatrixXd MinvK = M.inverse() * K;
-    Eigen::EigenSolver<Eigen::MatrixXd> es(MinvK);
-    
-    // Some modes might be slightly complex due to numerical precision, we just take real part
-    eigenvalues = es.eigenvalues().real();
-    eigenvectors = es.eigenvectors().real();
+    // Solve the symmetric generalized eigenproblem K v = lambda M v.
+    // This is more stable than explicitly forming M^-1 K and preserves the
+    // self-adjoint structure of the linearized mechanics.
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(K, M);
+
+    eigenvalues = es.eigenvalues();
+    eigenvectors = es.eigenvectors();
     inverse_eigenvectors = eigenvectors.inverse();
 }
 
@@ -45,6 +66,9 @@ std::string PendulumSystem::to_json() const {
     ss << "  \"n\": " << n << ",\n";
     ss << "  \"lengths\": [";
     for(int i=0; i<n; ++i) { ss << lengths[i] << (i<n-1?", ":""); }
+    ss << "],\n";
+    ss << "  \"masses\": [";
+    for(int i=0; i<n; ++i) { ss << masses[i] << (i<n-1?", ":""); }
     ss << "],\n";
     ss << "  \"g\": " << g << ",\n";
     
