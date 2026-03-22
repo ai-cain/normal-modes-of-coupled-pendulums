@@ -29,14 +29,17 @@ interface NonlinearState {
   velocities: number[];
 }
 
-const INITIAL_N = 4;
+const INITIAL_N = 2;
 const TOTAL_DEFAULT_LENGTH = 1.12;
 const DEFAULT_MASS = 1.0;
 const DEFAULT_INITIAL_ANGLE = 0.6;
 const LINEAR_ANGLE_LIMIT = 0.35;
 const NONLINEAR_ANGLE_LIMIT = 2.8;
 const MAX_SUBSTEP = 1 / 240;
-const MAX_TRAIL_POINTS = 90;
+const MAX_TRAIL_POINTS = 180;
+const DEFAULT_LENGTHS = [0.46, 0.76];
+const DEFAULT_MASSES = [1.35, 0.8];
+const DEFAULT_INITIAL_ANGLES = [0.95, -0.35];
 const COLOR_PALETTE = [
   '125, 211, 252',
   '165, 180, 252',
@@ -226,18 +229,17 @@ const rk4Step = (
 };
 
 function App() {
-  const initialLength = TOTAL_DEFAULT_LENGTH / INITIAL_N;
-  const initialAnglesArray = [DEFAULT_INITIAL_ANGLE, 0, 0, 0];
+  const initialAnglesArray = [...DEFAULT_INITIAL_ANGLES];
 
   const [simulationMode, setSimulationMode] = useState<SimulationMode>('nonlinear');
-  const [lengthMode, setLengthMode] = useState<DistributionMode>('equal');
-  const [massMode, setMassMode] = useState<DistributionMode>('equal');
+  const [lengthMode, setLengthMode] = useState<DistributionMode>('independent');
+  const [massMode, setMassMode] = useState<DistributionMode>('independent');
   const [angleMode, setAngleMode] = useState<DistributionMode>('independent');
 
   const [n, setN] = useState<number>(INITIAL_N);
   const [g, setG] = useState<number>(9.8);
-  const [lengths, setLengths] = useState<number[]>(createFilledArray(INITIAL_N, initialLength));
-  const [masses, setMasses] = useState<number[]>(createFilledArray(INITIAL_N, DEFAULT_MASS));
+  const [lengths, setLengths] = useState<number[]>([...DEFAULT_LENGTHS]);
+  const [masses, setMasses] = useState<number[]>([...DEFAULT_MASSES]);
   const [initialAngles, setInitialAngles] = useState<number[]>(initialAnglesArray);
 
   const [data, setData] = useState<SimulationData | null>(null);
@@ -560,17 +562,30 @@ function App() {
       ctx.clearRect(0, 0, width, height);
 
       const totalLength = lengths.reduce((sum, value) => sum + value, 0);
-      const scale = (height * 0.78) / (totalLength || 1);
-      let currentX = width / 2;
-      let currentY = 48;
+      const sidePadding = 42;
+      const topPadding = 24;
+      const bottomPadding = 34;
+      const scaleX = (width - 2 * sidePadding) / (2 * (totalLength || 1));
+      const scaleY = (height - topPadding - bottomPadding) / (2 * (totalLength || 1));
+      const scale = Math.min(scaleX, scaleY);
+      const anchorX = width / 2;
+      const anchorY = topPadding + scale * totalLength;
+
+      let currentX = anchorX;
+      let currentY = anchorY;
       const bobPositions: BobPosition[] = [];
 
       ctx.beginPath();
-      ctx.moveTo(width / 2 - 115, currentY);
-      ctx.lineTo(width / 2 + 115, currentY);
+      ctx.moveTo(anchorX - 120, topPadding);
+      ctx.lineTo(anchorX + 120, topPadding);
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(226, 232, 240, 0.95)';
       ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+      ctx.fill();
 
       for (let i = 0; i < n; i += 1) {
         const nextX = currentX + scale * lengths[i] * Math.sin(anglesToDraw[i]);
@@ -598,21 +613,24 @@ function App() {
 
       trailHistoryRef.current.forEach((trail, index) => {
         const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
+        ctx.lineCap = 'round';
 
         for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
-          const alpha = (pointIndex / trail.length) * 0.35;
+          const progress = pointIndex / Math.max(1, trail.length - 1);
+          const alpha = 0.015 + Math.pow(progress, 2.15) * 0.72;
+          const widthScale = 0.8 + progress * 1.8;
 
           ctx.beginPath();
           ctx.moveTo(trail[pointIndex - 1].x, trail[pointIndex - 1].y);
           ctx.lineTo(trail[pointIndex].x, trail[pointIndex].y);
-          ctx.lineWidth = 2;
+          ctx.lineWidth = widthScale;
           ctx.strokeStyle = `rgba(${rgb}, ${alpha})`;
           ctx.stroke();
         }
       });
 
-      currentX = width / 2;
-      currentY = 48;
+      currentX = anchorX;
+      currentY = anchorY;
 
       for (let i = 0; i < n; i += 1) {
         const bob = bobPositions[i];
@@ -672,6 +690,7 @@ function App() {
 
       <main className="main-content">
         <div className="controls-panel card">
+          <div className="controls-toolbar">
           <h2>Simulation Controls</h2>
 
           <div className="toggle-block">
@@ -709,7 +728,11 @@ function App() {
             </button>
           </div>
 
-          <div className="control-group" style={{ marginTop: '1.5rem' }}>
+          </div>
+
+          <div className="controls-body">
+
+          <div className="control-group">
             <label>N (Number of Pendulums): {n}</label>
             <input type="range" min="1" max="10" value={n} onChange={handleNChange} />
           </div>
@@ -899,6 +922,7 @@ function App() {
           )}
 
           {error && <div className="error">{error}</div>}
+          </div>
         </div>
 
         <div className="canvas-panel card">

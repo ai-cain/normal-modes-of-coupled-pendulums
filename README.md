@@ -77,14 +77,7 @@ Then open `http://localhost:5173/`.
 
 For the full nonlinear serial chain with unequal masses and unequal lengths, the implemented equations are
 
-$$
-\sum_{j=1}^{n}
-\mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j
-=
--\mu_i g \sin\theta_i
--\sum_{j=1}^{n}
-\mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2,
-$$
+$$ \sum_{j=1}^{n} \mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j = -\mu_i g \sin\theta_i - \sum_{j=1}^{n} \mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2 $$ 
 
 with
 
