@@ -2,6 +2,7 @@
 #include <Eigen/Eigenvalues>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 PendulumSystem::PendulumSystem(int num_pendulums, double L, double gravity) 
     : n(num_pendulums), total_length(L), g(gravity) {
@@ -45,7 +46,8 @@ std::string PendulumSystem::to_json() const {
     // frequencies = sqrt(eigenvalues)
     ss << "  \"frequencies\": [";
     for(int i=0; i<n; ++i) {
-        ss << std::sqrt(std::max(0.0, eigenvalues(i)));
+        double val = eigenvalues(i);
+        ss << std::sqrt(val > 0.0 ? val : 0.0);
         if (i < n - 1) ss << ", ";
     }
     ss << "],\n";

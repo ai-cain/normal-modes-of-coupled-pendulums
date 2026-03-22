@@ -1,5 +1,7 @@
 */build/
 
+*.txt
+
 # Prerequisites
 *.d
 

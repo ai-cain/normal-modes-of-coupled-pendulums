@@ -20,6 +20,7 @@ public:
     PendulumSystem(int num_pendulums, double L = 1.12, double gravity = 9.8);
     
     void build_matrices();
+    void solve_modes();
     std::string to_json() const;
 };
 
