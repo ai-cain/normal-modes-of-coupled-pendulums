@@ -93,34 +93,37 @@ For deploys, copy `frontend_web/.env.example` and set it to your public backend 
 
 For the full nonlinear serial chain with unequal masses and unequal lengths, the implemented equations are
 
-```text
-sum_{j=1}^{n} mu_{ij} l_j cos(theta_i-theta_j) theta_ddot_j
+```math
+\sum_{j=1}^{n} \mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j
 =
--mu_i g sin(theta_i)
-- sum_{j=1}^{n} mu_{ij} l_j sin(theta_i-theta_j) theta_dot_j^2
+-\mu_i g \sin(\theta_i)
+- \sum_{j=1}^{n} \mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2
 ```
 
 with
 
-```text
-mu_i = sum_{k=i}^{n} m_k
-mu_{ij} = sum_{k=max(i,j)}^{n} m_k
+```math
+\mu_i = \sum_{k=i}^{n} m_k
+\qquad
+\mu_{ij} = \sum_{k=\max(i,j)}^{n} m_k
 ```
 
 That nonlinear system is what the frontend integrates in `Nonlinear Sandbox`.
 
 For the small-angle modal view, the C++ engine solves the linearized generalized eigenvalue problem
 
-```text
-K v = lambda M v
-lambda = omega^2
+```math
+K v = \lambda M v
+\qquad
+\lambda = \omega^2
 ```
 
 with
 
-```text
-M_{ij} = mu_{ij} l_i l_j
-K_{ij} = delta_{ij} mu_i g l_i
+```math
+M_{ij} = \mu_{ij} l_i l_j
+\qquad
+K_{ij} = \delta_{ij}\,\mu_i g l_i
 ```
 
 ## Where To Look
