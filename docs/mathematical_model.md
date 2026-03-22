@@ -77,14 +77,15 @@ $$
 Applying the Euler-Lagrange equations gives the nonlinear coupled dynamics
 
 $$
+\begin{aligned}
 \sum_{j=1}^{n}
 \mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j
-
-=
+&=
 -\mu_i g \sin\theta_i
 -\sum_{j=1}^{n}
-\mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2,
-\qquad i=1,\dots,n.
+\mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2, \\
+&\qquad i=1,\dots,n.
+\end{aligned}
 $$
 
 Equivalently, define the configuration-dependent matrix
