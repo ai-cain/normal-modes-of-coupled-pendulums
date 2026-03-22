@@ -51,6 +51,16 @@ const resizeSeries = (
 const backendWebSocketUrl =
   import.meta.env.VITE_BACKEND_WS_URL?.trim() || 'ws://localhost:3001';
 
+const recordingMimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+
+const getSupportedRecordingMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') {
+    return '';
+  }
+
+  return recordingMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? '';
+};
+
 function App() {
   const [simulationMode, setSimulationMode] = useState<SimulationMode>('nonlinear');
   const [lengthMode, setLengthMode] = useState<DistributionMode>('independent');
@@ -66,10 +76,15 @@ function App() {
   const [data, setData] = useState<SimulationData | null>(null);
   const [error, setError] = useState('');
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
+  const [recordingError, setRecordingError] = useState('');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingUrlRef = useRef<string | null>(null);
   const timeRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const nonlinearAnglesRef = useRef<number[]>([...DEFAULT_INITIAL_ANGLES]);
@@ -78,9 +93,38 @@ function App() {
 
   const angleLimit =
     simulationMode === 'linear' ? LINEAR_ANGLE_LIMIT : NONLINEAR_ANGLE_LIMIT;
+  const isRecordingSupported =
+    typeof MediaRecorder !== 'undefined' &&
+    typeof HTMLCanvasElement !== 'undefined' &&
+    'captureStream' in HTMLCanvasElement.prototype;
 
   const clearTrails = (count: number) => {
     trailHistoryRef.current = Array.from({ length: count }, () => []);
+  };
+
+  const releaseRecordingUrl = () => {
+    if (!recordingUrlRef.current) {
+      return;
+    }
+
+    URL.revokeObjectURL(recordingUrlRef.current);
+    recordingUrlRef.current = null;
+  };
+
+  const stopRecorderStream = (recorder: MediaRecorder | null) => {
+    recorder?.stream.getTracks().forEach((track) => track.stop());
+  };
+
+  const downloadRecording = (blob: Blob) => {
+    releaseRecordingUrl();
+
+    const url = URL.createObjectURL(blob);
+    recordingUrlRef.current = url;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `coupled-pendulums-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    link.click();
   };
 
   const resetNonlinearState = (angles: number[]) => {
@@ -141,6 +185,31 @@ function App() {
       socket.close();
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      releaseRecordingUrl();
+
+      const recorder = mediaRecorderRef.current;
+      mediaRecorderRef.current = null;
+      recordedChunksRef.current = [];
+
+      if (!recorder) {
+        return;
+      }
+
+      recorder.ondataavailable = null;
+      recorder.onerror = null;
+      recorder.onstop = null;
+
+      if (recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+
+      stopRecorderStream(recorder);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isSocketReady) {
@@ -330,6 +399,76 @@ function App() {
   const resetToInitialState = () => {
     setIsPlaying(false);
     resetNonlinearState(initialAngles);
+  };
+
+  const handleToggleRecording = () => {
+    const currentRecorder = mediaRecorderRef.current;
+
+    if (currentRecorder && currentRecorder.state !== 'inactive') {
+      currentRecorder.stop();
+      return;
+    }
+
+    if (!isRecordingSupported) {
+      setRecordingError('Recording is not supported in this browser.');
+      return;
+    }
+
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      setRecordingError('Canvas is not ready yet.');
+      return;
+    }
+
+    const mimeType = getSupportedRecordingMimeType();
+
+    try {
+      const stream = canvas.captureStream(60);
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recordedChunksRef.current = [];
+      setRecordingError('');
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        setRecordingError('Recording failed while capturing the canvas.');
+        setIsRecording(false);
+        mediaRecorderRef.current = null;
+        recordedChunksRef.current = [];
+        stopRecorderStream(recorder);
+      };
+
+      recorder.onstop = () => {
+        const blob =
+          recordedChunksRef.current.length > 0
+            ? new Blob(recordedChunksRef.current, { type: mimeType || 'video/webm' })
+            : null;
+
+        if (blob) {
+          downloadRecording(blob);
+        }
+
+        setIsRecording(false);
+        mediaRecorderRef.current = null;
+        recordedChunksRef.current = [];
+        stopRecorderStream(recorder);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(250);
+      setIsRecording(true);
+    } catch {
+      setRecordingError('The browser could not start recording the pendulum canvas.');
+      setIsRecording(false);
+    }
   };
 
   useEffect(() => {
@@ -527,6 +666,8 @@ function App() {
           simulationMode={simulationMode}
           modeNote={modeNote}
           isPlaying={isPlaying}
+          isRecording={isRecording}
+          isRecordingSupported={isRecordingSupported}
           isSocketReady={isSocketReady}
           n={n}
           g={g}
@@ -538,8 +679,10 @@ function App() {
           masses={masses}
           initialAngles={initialAngles}
           error={error}
+          recordingError={recordingError}
           onSimulationModeChange={handleSimulationModeChange}
           onTogglePlay={() => setIsPlaying((value) => !value)}
+          onToggleRecording={handleToggleRecording}
           onReset={resetToInitialState}
           onNChange={handleNChange}
           onGravityChange={handleGravityChange}
@@ -562,6 +705,7 @@ function App() {
             </div>
 
             <div className="stage-badges">
+              {isRecording && <span className="status-pill recording">Recording</span>}
               <span className={`status-pill ${isPlaying ? 'active' : ''}`}>
                 {isPlaying ? 'Running' : 'Paused'}
               </span>

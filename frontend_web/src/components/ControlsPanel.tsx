@@ -5,6 +5,8 @@ interface ControlsPanelProps {
   simulationMode: SimulationMode;
   modeNote: string;
   isPlaying: boolean;
+  isRecording: boolean;
+  isRecordingSupported: boolean;
   isSocketReady: boolean;
   n: number;
   g: number;
@@ -16,8 +18,10 @@ interface ControlsPanelProps {
   masses: number[];
   initialAngles: number[];
   error: string;
+  recordingError: string;
   onSimulationModeChange: (mode: SimulationMode) => void;
   onTogglePlay: () => void;
+  onToggleRecording: () => void;
   onReset: () => void;
   onNChange: (value: number) => void;
   onGravityChange: (value: number) => void;
@@ -149,6 +153,8 @@ function ControlsPanel({
   simulationMode,
   modeNote,
   isPlaying,
+  isRecording,
+  isRecordingSupported,
   isSocketReady,
   n,
   g,
@@ -160,8 +166,10 @@ function ControlsPanel({
   masses,
   initialAngles,
   error,
+  recordingError,
   onSimulationModeChange,
   onTogglePlay,
+  onToggleRecording,
   onReset,
   onNChange,
   onGravityChange,
@@ -212,6 +220,14 @@ function ControlsPanel({
         </button>
         <button type="button" onClick={onReset} className="btn-secondary">
           Reset
+        </button>
+        <button
+          type="button"
+          onClick={onToggleRecording}
+          className={isRecording ? 'btn-stop' : 'btn-record'}
+          disabled={!isRecordingSupported}
+        >
+          {isRecording ? 'Stop' : 'Record'}
         </button>
       </div>
 
@@ -384,6 +400,7 @@ function ControlsPanel({
           </PanelSection>
         )}
 
+        {recordingError && <div className="error full-width">{recordingError}</div>}
         {error && <div className="error full-width">{error}</div>}
       </div>
     </aside>

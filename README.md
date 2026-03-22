@@ -7,14 +7,12 @@ Interactive sandbox for serial coupled pendulums with two complementary views of
 
 The frontend is a React + Vite canvas app. The linear modal solver lives in C++ and is served to the UI through a small Node/WebSocket bridge.
 
-## Screenshots
+## Demo Video
+
+[Download the higher-quality recording (`.webm`)](docs/media/demo.webm)
 
 <p align="center">
-  <img src="docs/img/image2.png" alt="Coupled pendulums interface screenshot" width="82%" />
-</p>
-
-<p align="center">
-  <img src="docs/img/image10.png" alt="Coupled pendulums interface detail screenshot" width="82%" />
+  <img src="docs/media/demo.gif" alt="Coupled pendulums demo animation" width="82%" />
 </p>
 
 ## What Is Implemented
@@ -95,7 +93,12 @@ For deploys, copy `frontend_web/.env.example` and set it to your public backend 
 
 For the full nonlinear serial chain with unequal masses and unequal lengths, the implemented equations are
 
-$$ \sum_{j=1}^{n} \mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j = -\mu_i g \sin\theta_i - \sum_{j=1}^{n} \mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2 $$ 
+$$
+\sum_{j=1}^{n} \mu_{ij} l_j \cos(\theta_i-\theta_j)\,\ddot{\theta}_j
+=
+-\mu_i g \sin\theta_i
+- \sum_{j=1}^{n} \mu_{ij} l_j \sin(\theta_i-\theta_j)\,\dot{\theta}_j^2
+$$
 
 with
 

@@ -1,5 +1,8 @@
 */build/
 
+*.webm
+*.png
+
 # Prerequisites
 *.d
 

@@ -243,9 +243,15 @@ input {
   color: var(--accent);
 }
 
+.status-pill.recording {
+  border-color: rgba(173, 77, 77, 0.24);
+  background: rgba(173, 77, 77, 0.1);
+  color: var(--danger);
+}
+
 .panel-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
@@ -284,6 +290,26 @@ button:hover {
 
 .btn-secondary {
   background: rgba(255, 255, 255, 0.82);
+}
+
+.btn-record {
+  background: rgba(36, 95, 93, 0.1);
+  border-color: rgba(36, 95, 93, 0.16);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.btn-stop {
+  background: rgba(173, 77, 77, 0.12);
+  border-color: rgba(173, 77, 77, 0.18);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .panel-scroll {
