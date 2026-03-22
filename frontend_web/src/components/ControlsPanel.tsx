@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react';
 import type { DistributionMode, SimulationMode } from '../types';
 
 interface ControlsPanelProps {
   simulationMode: SimulationMode;
   modeNote: string;
   isPlaying: boolean;
+  isSocketReady: boolean;
   n: number;
   g: number;
   lengthMode: DistributionMode;
@@ -13,8 +15,6 @@ interface ControlsPanelProps {
   lengths: number[];
   masses: number[];
   initialAngles: number[];
-  hasSharedControls: boolean;
-  hasIndependentControls: boolean;
   error: string;
   onSimulationModeChange: (mode: SimulationMode) => void;
   onTogglePlay: () => void;
@@ -41,11 +41,21 @@ interface ToggleGroupProps<T extends string> {
 
 interface SliderFieldProps {
   label: string;
+  valueLabel: string;
   value: number;
   min: number;
   max: number;
   step: number;
+  inputDecimals?: number;
   onChange: (value: number) => void;
+}
+
+interface PanelSectionProps {
+  eyebrow: string;
+  title: string;
+  description?: string;
+  fullWidth?: boolean;
+  children: ReactNode;
 }
 
 const ToggleGroup = <T extends string>({
@@ -73,31 +83,73 @@ const ToggleGroup = <T extends string>({
 
 const SliderField = ({
   label,
+  valueLabel,
   value,
   min,
   max,
   step,
+  inputDecimals = 2,
   onChange,
 }: SliderFieldProps) => (
-  <div className="control-group small">
-    <label>{label}</label>
-    <input
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(event) => onChange(parseFloat(event.target.value))}
-    />
+  <div className="slider-field">
+    <div className="field-heading">
+      <label>{label}</label>
+      <span className="field-value">{valueLabel}</span>
+    </div>
+    <div className="field-controls">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(parseFloat(event.target.value))}
+      />
+      <input
+        className="value-input"
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={Number(value.toFixed(inputDecimals))}
+        onChange={(event) => {
+          const nextValue = parseFloat(event.target.value);
+
+          if (!Number.isNaN(nextValue)) {
+            onChange(nextValue);
+          }
+        }}
+      />
+    </div>
   </div>
 );
 
-const formatAngle = (angle: number) => `${((angle * 180) / Math.PI).toFixed(1)} deg`;
+const PanelSection = ({
+  eyebrow,
+  title,
+  description,
+  fullWidth = false,
+  children,
+}: PanelSectionProps) => (
+  <section className={`panel-section ${fullWidth ? 'full-width' : ''}`}>
+    <div className="section-heading">
+      <span className="section-eyebrow">{eyebrow}</span>
+      <h3>{title}</h3>
+      {description && <p>{description}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+const toDegrees = (angle: number) => (angle * 180) / Math.PI;
+const toRadians = (angle: number) => (angle * Math.PI) / 180;
+const formatAngle = (angleDegrees: number) => `${angleDegrees.toFixed(1)} deg`;
 
 function ControlsPanel({
   simulationMode,
   modeNote,
   isPlaying,
+  isSocketReady,
   n,
   g,
   lengthMode,
@@ -107,8 +159,6 @@ function ControlsPanel({
   lengths,
   masses,
   initialAngles,
-  hasSharedControls,
-  hasIndependentControls,
   error,
   onSimulationModeChange,
   onTogglePlay,
@@ -125,176 +175,218 @@ function ControlsPanel({
   onLengthChange,
   onMassChange,
 }: ControlsPanelProps) {
+  const hasSharedControls =
+    lengthMode === 'equal' || massMode === 'equal' || angleMode === 'equal';
+  const hasIndependentControls =
+    lengthMode === 'independent' ||
+    massMode === 'independent' ||
+    angleMode === 'independent';
+  const connectionLabel =
+    simulationMode === 'linear'
+      ? isSocketReady
+        ? 'Solver ready'
+        : 'Solver offline'
+      : 'Browser';
+  const angleLimitDegrees = toDegrees(angleLimit);
+
   return (
-    <div className="controls-panel card">
-      <div className="controls-toolbar">
-        <h2>Simulation Controls</h2>
-
-        <ToggleGroup
-          label="Dynamics"
-          value={simulationMode}
-          onChange={onSimulationModeChange}
-          options={[
-            { value: 'nonlinear', label: 'Nonlinear Sandbox' },
-            { value: 'linear', label: 'Linear Modes' },
-          ]}
-        />
-
-        <div className="playback-controls">
-          <button type="button" onClick={onTogglePlay} className="btn-primary">
-            {isPlaying ? 'Pause' : 'Play'}
-          </button>
-          <button type="button" onClick={onReset} className="btn-secondary">
-            Reset t = 0
-          </button>
+    <aside className="controls-panel card">
+      <div className="panel-intro">
+        <div>
+          <span className="section-eyebrow">Controls</span>
+          <h2>Setup</h2>
+          <p>Mass, length and angle values stay visible while you edit.</p>
         </div>
+        <span
+          className={`connection-pill ${
+            simulationMode === 'linear' && !isSocketReady ? 'warning' : 'success'
+          }`}
+        >
+          {connectionLabel}
+        </span>
       </div>
 
-      <div className="controls-body">
-        <div className="model-note">{modeNote}</div>
+      <div className="panel-actions">
+        <button type="button" onClick={onTogglePlay} className="btn-primary">
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <button type="button" onClick={onReset} className="btn-secondary">
+          Reset
+        </button>
+      </div>
 
-        <div className="control-group">
-          <label>N (Number of Pendulums): {n}</label>
-          <input
-            type="range"
-            min="1"
-            max="10"
+      <div className="panel-scroll">
+        <PanelSection eyebrow="Dynamics" title="Model">
+          <ToggleGroup
+            label="Dynamics"
+            value={simulationMode}
+            onChange={onSimulationModeChange}
+            options={[
+              { value: 'nonlinear', label: 'Nonlinear Sandbox' },
+              { value: 'linear', label: 'Linear Modes' },
+            ]}
+          />
+          <div className="model-note">{modeNote}</div>
+        </PanelSection>
+
+        <PanelSection eyebrow="System" title="Global values">
+          <SliderField
+            label="Pendulums"
+            valueLabel={`${n}`}
             value={n}
-            onChange={(event) => onNChange(parseInt(event.target.value, 10))}
+            min={1}
+            max={10}
+            step={1}
+            inputDecimals={0}
+            onChange={onNChange}
           />
-        </div>
 
-        <div className="control-group">
-          <label>Gravity (g): {g.toFixed(2)} m/s^2</label>
-          <input
-            type="range"
-            min="1.0"
-            max="25.0"
-            step="0.1"
+          <SliderField
+            label="Gravity"
+            valueLabel={`${g.toFixed(2)} m/s^2`}
             value={g}
-            onChange={(event) => onGravityChange(parseFloat(event.target.value))}
+            min={1}
+            max={25}
+            step={0.1}
+            inputDecimals={2}
+            onChange={onGravityChange}
           />
-        </div>
+        </PanelSection>
 
-        <div className="toggle-grid">
-          <ToggleGroup
-            label="Lengths"
-            value={lengthMode}
-            onChange={onLengthModeChange}
-            options={[
-              { value: 'equal', label: 'Equal' },
-              { value: 'independent', label: 'Unequal' },
-            ]}
-          />
+        <PanelSection eyebrow="Structure" title="Distribution">
+          <div className="toggle-grid">
+            <ToggleGroup
+              label="Lengths"
+              value={lengthMode}
+              onChange={onLengthModeChange}
+              options={[
+                { value: 'equal', label: 'Equal' },
+                { value: 'independent', label: 'Unequal' },
+              ]}
+            />
 
-          <ToggleGroup
-            label="Masses"
-            value={massMode}
-            onChange={onMassModeChange}
-            options={[
-              { value: 'equal', label: 'Equal' },
-              { value: 'independent', label: 'Unequal' },
-            ]}
-          />
+            <ToggleGroup
+              label="Masses"
+              value={massMode}
+              onChange={onMassModeChange}
+              options={[
+                { value: 'equal', label: 'Equal' },
+                { value: 'independent', label: 'Unequal' },
+              ]}
+            />
 
-          <ToggleGroup
-            label="Angles"
-            value={angleMode}
-            onChange={onAngleModeChange}
-            options={[
-              { value: 'equal', label: 'Equal' },
-              { value: 'independent', label: 'Unequal' },
-            ]}
-          />
-        </div>
+            <ToggleGroup
+              label="Angles"
+              value={angleMode}
+              onChange={onAngleModeChange}
+              options={[
+                { value: 'equal', label: 'Equal' },
+                { value: 'independent', label: 'Unequal' },
+              ]}
+            />
+          </div>
+        </PanelSection>
 
         {hasSharedControls && (
-          <div className="shared-panel">
-            <h3>Shared Controls</h3>
-
+          <PanelSection eyebrow="Shared" title="Shared values" fullWidth>
             {angleMode === 'equal' && (
               <SliderField
-                label={`Shared Initial Angle: ${formatAngle(initialAngles[0] ?? 0)}`}
-                value={initialAngles[0] ?? 0}
-                min={-angleLimit}
-                max={angleLimit}
-                step={0.01}
-                onChange={onSharedAngleChange}
+                label="Initial angle"
+                valueLabel={formatAngle(toDegrees(initialAngles[0] ?? 0))}
+                value={toDegrees(initialAngles[0] ?? 0)}
+                min={-angleLimitDegrees}
+                max={angleLimitDegrees}
+                step={0.5}
+                inputDecimals={1}
+                onChange={(value) => onSharedAngleChange(toRadians(value))}
               />
             )}
 
             {lengthMode === 'equal' && (
               <SliderField
-                label={`Shared Segment Length: ${(lengths[0] ?? 0).toFixed(2)} m`}
+                label="Segment length"
+                valueLabel={`${(lengths[0] ?? 0).toFixed(2)} m`}
                 value={lengths[0] ?? 0}
                 min={0.1}
-                max={2.0}
+                max={2}
                 step={0.05}
+                inputDecimals={2}
                 onChange={onSharedLengthChange}
               />
             )}
 
             {massMode === 'equal' && (
               <SliderField
-                label={`Shared Mass: ${(masses[0] ?? 0).toFixed(2)} kg`}
+                label="Mass"
+                valueLabel={`${(masses[0] ?? 0).toFixed(2)} kg`}
                 value={masses[0] ?? 0}
                 min={0.2}
-                max={5.0}
+                max={5}
                 step={0.05}
+                inputDecimals={2}
                 onChange={onSharedMassChange}
               />
             )}
-          </div>
+          </PanelSection>
         )}
 
         {hasIndependentControls && (
-          <div className="scroll-panel">
-            <h3>Per-Pendulum Controls</h3>
+          <PanelSection eyebrow="Per pendulum" title="Fine tuning" fullWidth>
+            <div className="pendulum-grid">
+              {Array.from({ length: n }, (_, index) => (
+                <div key={index} className="pendulum-config">
+                  <div className="pendulum-heading">
+                    <h4>Pendulum {index + 1}</h4>
+                    <span>#{index + 1}</span>
+                  </div>
 
-            {Array.from({ length: n }, (_, index) => (
-              <div key={index} className="pendulum-config">
-                <h4>Pendulum {index + 1}</h4>
+                  {angleMode === 'independent' && (
+                    <SliderField
+                      label="Initial angle"
+                      valueLabel={formatAngle(toDegrees(initialAngles[index] ?? 0))}
+                      value={toDegrees(initialAngles[index] ?? 0)}
+                      min={-angleLimitDegrees}
+                      max={angleLimitDegrees}
+                      step={0.5}
+                      inputDecimals={1}
+                      onChange={(value) => onAngleChange(index, toRadians(value))}
+                    />
+                  )}
 
-                {angleMode === 'independent' && (
-                  <SliderField
-                    label={`Initial Angle: ${formatAngle(initialAngles[index] ?? 0)}`}
-                    value={initialAngles[index] ?? 0}
-                    min={-angleLimit}
-                    max={angleLimit}
-                    step={0.01}
-                    onChange={(value) => onAngleChange(index, value)}
-                  />
-                )}
+                  {lengthMode === 'independent' && (
+                    <SliderField
+                      label="Segment length"
+                      valueLabel={`${(lengths[index] ?? 0).toFixed(2)} m`}
+                      value={lengths[index] ?? 0}
+                      min={0.1}
+                      max={2}
+                      step={0.05}
+                      inputDecimals={2}
+                      onChange={(value) => onLengthChange(index, value)}
+                    />
+                  )}
 
-                {lengthMode === 'independent' && (
-                  <SliderField
-                    label={`Segment Length: ${(lengths[index] ?? 0).toFixed(2)} m`}
-                    value={lengths[index] ?? 0}
-                    min={0.1}
-                    max={2.0}
-                    step={0.05}
-                    onChange={(value) => onLengthChange(index, value)}
-                  />
-                )}
-
-                {massMode === 'independent' && (
-                  <SliderField
-                    label={`Mass: ${(masses[index] ?? 0).toFixed(2)} kg`}
-                    value={masses[index] ?? 0}
-                    min={0.2}
-                    max={5.0}
-                    step={0.05}
-                    onChange={(value) => onMassChange(index, value)}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+                  {massMode === 'independent' && (
+                    <SliderField
+                      label="Mass"
+                      valueLabel={`${(masses[index] ?? 0).toFixed(2)} kg`}
+                      value={masses[index] ?? 0}
+                      min={0.2}
+                      max={5}
+                      step={0.05}
+                      inputDecimals={2}
+                      onChange={(value) => onMassChange(index, value)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </PanelSection>
         )}
 
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error full-width">{error}</div>}
       </div>
-    </div>
+    </aside>
   );
 }
 

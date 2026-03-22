@@ -7,6 +7,16 @@ Interactive sandbox for serial coupled pendulums with two complementary views of
 
 The frontend is a React + Vite canvas app. The linear modal solver lives in C++ and is served to the UI through a small Node/WebSocket bridge.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/img/image2.png" alt="Coupled pendulums interface screenshot" width="82%" />
+</p>
+
+<p align="center">
+  <img src="docs/img/image10.png" alt="Coupled pendulums interface detail screenshot" width="82%" />
+</p>
+
 ## What Is Implemented
 
 - Arbitrary number of pendulums from `1` to `10`

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import ControlsPanel from './components/ControlsPanel';
 import {
   clamp,
@@ -68,7 +68,7 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timeRef = useRef(0);
-  const lastFrameTimeRef = useRef(performance.now());
+  const lastFrameTimeRef = useRef(0);
   const nonlinearAnglesRef = useRef<number[]>([...DEFAULT_INITIAL_ANGLES]);
   const nonlinearVelocitiesRef = useRef<number[]>(createFilledArray(INITIAL_N, 0));
   const trailHistoryRef = useRef<Point[][]>(Array.from({ length: INITIAL_N }, () => []));
@@ -157,7 +157,7 @@ function App() {
     );
   }, [data, initialAngles]);
 
-  const advanceNonlinearState = (totalDt: number) => {
+  const advanceNonlinearState = useEffectEvent((totalDt: number) => {
     let remaining = totalDt;
     let nextAngles = nonlinearAnglesRef.current;
     let nextVelocities = nonlinearVelocitiesRef.current;
@@ -172,7 +172,7 @@ function App() {
 
     nonlinearAnglesRef.current = nextAngles;
     nonlinearVelocitiesRef.current = nextVelocities;
-  };
+  });
 
   const updateLengths = (nextLengths: number[]) => {
     setLengths(nextLengths);
@@ -406,13 +406,13 @@ function App() {
       context.beginPath();
       context.moveTo(anchorPoint.x - 120, anchorPoint.y);
       context.lineTo(anchorPoint.x + 120, anchorPoint.y);
-      context.lineWidth = 4;
-      context.strokeStyle = 'rgba(226, 232, 240, 0.95)';
+      context.lineWidth = 3;
+      context.strokeStyle = 'rgba(31, 37, 50, 0.2)';
       context.stroke();
 
       context.beginPath();
       context.arc(anchorPoint.x, anchorPoint.y, 4, 0, Math.PI * 2);
-      context.fillStyle = 'rgba(226, 232, 240, 0.95)';
+      context.fillStyle = 'rgba(31, 37, 50, 0.48)';
       context.fill();
 
       context.lineCap = 'round';
@@ -421,8 +421,8 @@ function App() {
 
         for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
           const progress = pointIndex / Math.max(1, trail.length - 1);
-          const alpha = 0.015 + Math.pow(progress, 2.15) * 0.72;
-          const widthScale = 0.8 + progress * 1.8;
+          const alpha = 0.03 + Math.pow(progress, 2.1) * 0.42;
+          const widthScale = 0.85 + progress * 1.45;
 
           context.beginPath();
           context.moveTo(trail[pointIndex - 1].x, trail[pointIndex - 1].y);
@@ -441,15 +441,15 @@ function App() {
         context.moveTo(previousPoint.x, previousPoint.y);
         context.lineTo(point.x, point.y);
         context.lineWidth = 2;
-        context.strokeStyle = 'rgba(203, 213, 225, 0.82)';
+        context.strokeStyle = 'rgba(53, 60, 74, 0.38)';
         context.stroke();
 
         context.beginPath();
         context.arc(point.x, point.y, 11, 0, Math.PI * 2);
-        context.fillStyle = `rgba(${rgb}, 0.88)`;
+        context.fillStyle = `rgba(${rgb}, 0.82)`;
         context.fill();
         context.lineWidth = 2;
-        context.strokeStyle = 'rgba(248, 250, 252, 0.95)';
+        context.strokeStyle = 'rgba(255, 252, 247, 0.92)';
         context.stroke();
 
         previousPoint = point;
@@ -464,35 +464,67 @@ function App() {
     return () => cancelAnimationFrame(animationId);
   }, [data, g, initialAngles, isPlaying, lengths, masses, modalCoefficients, n, simulationMode]);
 
-  const hasSharedControls =
-    lengthMode === 'equal' || massMode === 'equal' || angleMode === 'equal';
-  const hasIndependentControls =
-    lengthMode === 'independent' ||
-    massMode === 'independent' ||
-    angleMode === 'independent';
-
   const headerDescription =
     simulationMode === 'nonlinear'
-      ? 'Nonlinear n-pendulum sandbox with arbitrary masses, lengths, and large angles'
-      : 'Linear small-angle modal superposition for normal modes and beats';
+      ? 'Single-view workspace for nonlinear motion.'
+      : 'Single-view workspace for normal modes.';
 
   const modeNote =
     simulationMode === 'nonlinear'
-      ? 'Nonlinear mode integrates the full coupled equations with RK4. Chaos can appear for some high-energy initial conditions, but it is not guaranteed for every large-angle release.'
-      : 'Linear mode solves the small-angle modal problem. It is ideal for eigenmodes and beating, but it is integrable and therefore not chaotic.';
+      ? 'Full coupled equations integrated with RK4.'
+      : 'Motion reconstructed from normal modes.';
+
+  const stageStatusLabel =
+    simulationMode === 'linear'
+      ? isSocketReady
+        ? 'Linear backend ready'
+        : 'Linear backend offline'
+      : 'Running in browser';
+
+  const metricCards = [
+    {
+      label: 'Mode',
+      value: simulationMode === 'nonlinear' ? 'Full dynamics' : 'Normal modes',
+    },
+    {
+      label: 'Chain',
+      value: `${n} bodies`,
+    },
+    {
+      label: 'Gravity',
+      value: `${g.toFixed(2)} m/s^2`,
+    },
+    {
+      label: 'Status',
+      value: isPlaying ? 'Animating' : 'Paused',
+    },
+  ];
 
   return (
-    <div className="container">
-      <header>
-        <h1>Coupled Pendulums Sandbox</h1>
-        <p>{headerDescription}</p>
+    <div className="app-shell">
+      <header className="hero">
+        <div className="hero-copy">
+          <span className="eyebrow">Coupled Pendulums</span>
+          <h1>Pendulum lab</h1>
+          <p>{headerDescription}</p>
+        </div>
+
+        <div className="hero-metrics">
+          {metricCards.map((metric) => (
+            <article key={metric.label} className="metric-card">
+              <span className="metric-label">{metric.label}</span>
+              <strong>{metric.value}</strong>
+            </article>
+          ))}
+        </div>
       </header>
 
-      <main className="main-content">
+      <main className="workspace">
         <ControlsPanel
           simulationMode={simulationMode}
           modeNote={modeNote}
           isPlaying={isPlaying}
+          isSocketReady={isSocketReady}
           n={n}
           g={g}
           lengthMode={lengthMode}
@@ -502,8 +534,6 @@ function App() {
           lengths={lengths}
           masses={masses}
           initialAngles={initialAngles}
-          hasSharedControls={hasSharedControls}
-          hasIndependentControls={hasIndependentControls}
           error={error}
           onSimulationModeChange={handleSimulationModeChange}
           onTogglePlay={() => setIsPlaying((value) => !value)}
@@ -521,9 +551,31 @@ function App() {
           onMassChange={handleMassChange}
         />
 
-        <div className="canvas-panel card">
-          <canvas ref={canvasRef} width={700} height={760}></canvas>
-        </div>
+        <section className="stage-panel card">
+          <div className="stage-header">
+            <div>
+              <span className="section-eyebrow">Live View</span>
+              <h2>Pendulum stage</h2>
+            </div>
+
+            <div className="stage-badges">
+              <span className={`status-pill ${isPlaying ? 'active' : ''}`}>
+                {isPlaying ? 'Running' : 'Paused'}
+              </span>
+              <span
+                className={`status-pill ${
+                  simulationMode === 'linear' && !isSocketReady ? 'warning' : 'success'
+                }`}
+              >
+                {stageStatusLabel}
+              </span>
+            </div>
+          </div>
+
+          <div className="canvas-frame">
+            <canvas ref={canvasRef} width={700} height={760}></canvas>
+          </div>
+        </section>
       </main>
     </div>
   );
