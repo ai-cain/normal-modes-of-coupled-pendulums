@@ -48,6 +48,9 @@ const resizeSeries = (
   fallback: (index: number) => number,
 ) => Array.from({ length: nextCount }, (_, index) => current[index] ?? fallback(index));
 
+const backendWebSocketUrl =
+  import.meta.env.VITE_BACKEND_WS_URL?.trim() || 'ws://localhost:3001';
+
 function App() {
   const [simulationMode, setSimulationMode] = useState<SimulationMode>('nonlinear');
   const [lengthMode, setLengthMode] = useState<DistributionMode>('independent');
@@ -108,7 +111,7 @@ function App() {
   };
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:3001');
+    const socket = new WebSocket(backendWebSocketUrl);
     wsRef.current = socket;
 
     socket.onopen = () => {

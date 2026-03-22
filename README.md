@@ -77,6 +77,14 @@ pnpm dev
 
 Then open `http://localhost:5173/`.
 
+The frontend reads the backend WebSocket URL from `frontend_web/.env`:
+
+```env
+VITE_BACKEND_WS_URL=ws://localhost:3001
+```
+
+For deploys, copy `frontend_web/.env.example` and set it to your public backend WebSocket URL.
+
 ## Notes
 
 - In `Nonlinear Sandbox`, chaos is possible but not guaranteed for every release condition.
